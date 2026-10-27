@@ -39,17 +39,9 @@ npx prisma generate
 npm run dev
 ```
 
-- App: http://localhost:5173
-- API: http://localhost:4000/api/health
-- Analyzer: http://localhost:8001/health
-
 ## Tests
 
 ```bash
 npm run test -w @repolens/api
 cd services/analyzer && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/pytest -q
 ```
-
-## Proposal
-
-The original project proposal is in `docs/Codebase_Compass_Updated_Project_Proposal.docx`.
