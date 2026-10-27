@@ -1,0 +1,30 @@
+{
+  "name": "repolens",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/web",
+    "apps/api"
+  ],
+  "scripts": {
+    "dev": "docker compose up -d db && sh -c 'until docker compose exec -T db pg_isready -U repolens; do sleep 1; done' && npm run prisma:deploy && concurrently -n api,web,analyzer -c cyan,magenta,green \"npm run dev:api\" \"npm run dev:web\" \"npm run dev:analyzer\"",
+    "dev:web": "npm run dev -w @repolens/web",
+    "dev:api": "npm run dev -w @repolens/api",
+    "dev:analyzer": "cd services/analyzer && (test -d .venv || python3 -m venv .venv) && .venv/bin/pip install -q -r requirements.txt && .venv/bin/uvicorn app.main:app --reload --port 8001",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy && prisma generate",
+    "test": "npm run test -w @repolens/api && npm run test -w @repolens/web && cd services/analyzer && (.venv/bin/pytest -q || python3 -m pytest -q)",
+    "build": "npm run build -w @repolens/api && npm run build -w @repolens/web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "prisma": "^6.6.0"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.6.0"
+  },
+  "prisma": {
+    "schema": "prisma/schema.prisma"
+  }
+}

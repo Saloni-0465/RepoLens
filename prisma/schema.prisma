@@ -1,0 +1,93 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Repository {
+  id               String        @id @default(cuid())
+  fullName         String
+  repositoryUrl    String
+  defaultBranch    String?
+  analyzedRevision String?
+  description      String?
+  stars            Int?
+  primaryLanguage  String?
+  createdAt        DateTime      @default(now())
+  analysisRuns     AnalysisRun[]
+
+  @@index([fullName])
+}
+
+model AnalysisRun {
+  id            String                @id @default(cuid())
+  repositoryId  String
+  repository    Repository            @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  status        String                @default("pending")
+  startedAt     DateTime              @default(now())
+  completedAt   DateTime?
+  errorCode     String?
+  errorMessage  String?
+  summary       String?
+  skippedFiles  Int                   @default(0)
+  indexedFiles  Int                   @default(0)
+  files         FileRecord[]
+  technologies  TechnologyFinding[]
+  messages      ConversationMessage[]
+  treeJson      Json?
+
+  @@index([repositoryId, status])
+}
+
+model FileRecord {
+  id            String      @id @default(cuid())
+  analysisRunId String
+  analysisRun   AnalysisRun @relation(fields: [analysisRunId], references: [id], onDelete: Cascade)
+  path          String
+  language      String?
+  sizeBytes     Int
+  fileRole      String?
+  summary       String?
+  parseStatus   String      @default("ok")
+  content       String?
+  chunks        CodeChunk[]
+
+  @@index([analysisRunId, path])
+}
+
+model TechnologyFinding {
+  id             String      @id @default(cuid())
+  analysisRunId  String
+  analysisRun    AnalysisRun @relation(fields: [analysisRunId], references: [id], onDelete: Cascade)
+  name           String
+  category       String
+  evidenceFile   String
+  evidenceDetail String
+  confidence     String      @default("high")
+}
+
+model CodeChunk {
+  id           String     @id @default(cuid())
+  fileRecordId String
+  fileRecord   FileRecord @relation(fields: [fileRecordId], references: [id], onDelete: Cascade)
+  startLine    Int
+  endLine      Int
+  symbolName   String?
+  content      String
+}
+
+model ConversationMessage {
+  id            String      @id @default(cuid())
+  analysisRunId String
+  analysisRun   AnalysisRun @relation(fields: [analysisRunId], references: [id], onDelete: Cascade)
+  sessionId     String
+  role          String
+  content       String
+  citations     Json?
+  createdAt     DateTime    @default(now())
+
+  @@index([analysisRunId, sessionId])
+}
