@@ -31,13 +31,21 @@ npx prisma generate
 
 3. Python 3.10+ for the analyzer (created automatically by `npm run dev`).
 
-4. Optional: set `GITHUB_TOKEN` (raises GitHub rate limits) and `OPENAI_API_KEY` (natural-language answers). Without an LLM key, questions return extractive quotes from retrieved files.
+4. Set `GITHUB_TOKEN` in `.env` before analyzing repositories. Without it, GitHub limits requests to 60 per hour per originating IP; a personal access token raises the authenticated quota. Use a read-only token and keep it in the server-side `.env` file (never in frontend code). If a token has just been added or changed, restart the API.
 
-5. Run everything:
+5. Optional: set `OPENAI_API_KEY` for natural-language answers. `OPENAI_MODEL` defaults to `gpt-4o-mini`. Without an OpenAI key, RepoLens answers by quoting the most relevant retrieved source chunks.
+
+6. Run everything:
 
 ```bash
 npm run dev
 ```
+
+## How repository analysis and answers work
+
+- GitHub's REST API supplies repository metadata and the file tree. RepoLens downloads selected source and manifest files, then the Python analyzer detects technologies from dependency/configuration files and extracts code structure with parsers. This indexing step does not call an AI model.
+- Questions are matched against indexed code using PostgreSQL full-text search, with a basic keyword fallback. This search does not use embeddings or an AI model.
+- When `OPENAI_API_KEY` is configured, the selected `OPENAI_MODEL` (default `gpt-4o-mini`) drafts an answer from retrieved excerpts. RepoLens validates citations against the retrieved files. Without the key, it returns source excerpts directly.
 
 ## Tests
 
