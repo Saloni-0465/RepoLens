@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
+import { fileRole, languageFromPath } from "../lib/filters.js";
 import { parseGithubUrl } from "../lib/githubUrl.js";
 import { runAnalysis } from "../services/pipeline.js";
+import { getFileText } from "../services/github.js";
 import { answerQuestion } from "../services/qa.js";
 
 export const repositories = Router();
@@ -112,6 +114,37 @@ repositories.get("/:id/files/:fileId", async (req, res) => {
   res.json(file);
 });
 
+repositories.get("/:id/source", async (req, res) => {
+  const parsedPath = z.string().min(1).max(1024).safeParse(req.query.path);
+  if (!parsedPath.success) return res.status(400).json({ error: "Provide a valid file path." });
+  const sourcePath = parsedPath.data;
+  if (
+    sourcePath.startsWith("/") ||
+    sourcePath.includes("\\") ||
+    sourcePath.includes("\0") ||
+    sourcePath.split("/").some((part) => !part || part === "." || part === "..")
+  ) {
+    return res.status(400).json({ error: "Invalid repository file path." });
+  }
+
+  const run = await latestRun(req.params.id);
+  if (!run) return res.status(404).json({ error: "Repository not found" });
+  if (run.status !== "completed") return res.status(409).json({ error: "Repository analysis is not complete yet." });
+  if (!treeHasFile(run.treeJson, sourcePath)) return res.status(404).json({ error: "File is not in this repository snapshot." });
+
+  const repository = await prisma.repository.findUnique({ where: { id: req.params.id } });
+  if (!repository?.analyzedRevision) return res.status(404).json({ error: "Repository revision is unavailable." });
+  const [owner, repoName, ...extra] = repository.fullName.split("/");
+  if (!owner || !repoName || extra.length) return res.status(500).json({ error: "Stored repository identity is invalid." });
+
+  const maxBytes = Number(process.env.MAX_FILE_BYTES ?? 200_000);
+  const content = await getFileText(owner, repoName, repository.analyzedRevision, sourcePath, maxBytes);
+  if (content === null) {
+    return res.status(413).json({ error: `This file could not be previewed. It may be binary, unavailable, or larger than the ${Math.round(maxBytes / 1000)} KB preview limit.` });
+  }
+  res.json({ path: sourcePath, language: languageFromPath(sourcePath), fileRole: fileRole(sourcePath), summary: null, content });
+});
+
 repositories.post("/:id/questions", async (req, res) => {
   const parsed = questionBody.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid question" });
@@ -129,5 +162,14 @@ async function latestRun(repoId: string) {
   return prisma.analysisRun.findFirst({
     where: { repositoryId: repoId },
     orderBy: { startedAt: "desc" },
+  });
+}
+
+function treeHasFile(nodes: unknown, path: string): boolean {
+  if (!Array.isArray(nodes)) return false;
+  return nodes.some((node) => {
+    if (!node || typeof node !== "object") return false;
+    const entry = node as { type?: unknown; path?: unknown; children?: unknown };
+    return (entry.type === "file" && entry.path === path) || treeHasFile(entry.children, path);
   });
 }

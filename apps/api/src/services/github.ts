@@ -24,8 +24,50 @@ export class GithubError extends Error {
 async function gh<T>(path: string): Promise<T> {
   const res = await fetch(`${API}${path}`, { headers: headers() });
   if (res.status === 404) throw new GithubError("Repository not found or private.", "not_found", 404);
-  if (res.status === 403) throw new GithubError("GitHub rate limit or access denied. Add GITHUB_TOKEN.", "rate_limited", 403);
-  if (!res.ok) throw new GithubError(`GitHub request failed (${res.status}).`, "github_error", res.status);
+  if (!res.ok) {
+    const body = await res.text();
+    let githubMessage = "";
+    try {
+      githubMessage = (JSON.parse(body) as { message?: string }).message ?? "";
+    } catch {
+      // Keep the API error readable even if GitHub returns a non-JSON response.
+    }
+
+    if (res.status === 401) {
+      throw new GithubError(
+        "GitHub rejected GITHUB_TOKEN. Check that the token is valid and has not expired, then restart RepoLens.",
+        "github_auth_failed",
+        401,
+      );
+    }
+
+    const remaining = res.headers.get("x-ratelimit-remaining");
+    const isRateLimit = res.status === 429 || remaining === "0" || /rate limit/i.test(githubMessage);
+    if (isRateLimit) {
+      const reset = Number(res.headers.get("x-ratelimit-reset"));
+      const resetText = Number.isFinite(reset) && reset > 0
+        ? ` The current quota resets at ${new Date(reset * 1000).toLocaleTimeString()}.`
+        : "";
+      const tokenHint = process.env.GITHUB_TOKEN?.trim()
+        ? " Check that GITHUB_TOKEN is valid, then restart RepoLens."
+        : " Add a GitHub token to GITHUB_TOKEN in the project .env file, then restart RepoLens.";
+      throw new GithubError(
+        `GitHub API rate limit reached.${resetText}${tokenHint}`,
+        "rate_limited",
+        res.status,
+      );
+    }
+
+    if (res.status === 403) {
+      const detail = githubMessage ? ` GitHub says: ${githubMessage}` : "";
+      const tokenHint = process.env.GITHUB_TOKEN?.trim()
+        ? " Check that the token can read public repository metadata."
+        : " If the repository is public, add a token to GITHUB_TOKEN in .env and restart RepoLens.";
+      throw new GithubError(`GitHub denied this request.${detail}${tokenHint}`, "github_access_denied", 403);
+    }
+
+    throw new GithubError(`GitHub request failed (${res.status})${githubMessage ? `: ${githubMessage}` : "."}`, "github_error", res.status);
+  }
   return (await res.json()) as T;
 }
 
