@@ -103,10 +103,10 @@ export async function runAnalysis(runId: string, owner: string, repo: string) {
         });
       }
 
-      for (const file of fetched) {
-        const parsed = byPath.get(file.path);
-        const record = await tx.fileRecord.create({
-          data: {
+      const records = await tx.fileRecord.createManyAndReturn({
+        data: fetched.map((file) => {
+          const parsed = byPath.get(file.path);
+          return {
             analysisRunId: runId,
             path: file.path,
             language: file.language,
@@ -115,27 +115,33 @@ export async function runAnalysis(runId: string, owner: string, repo: string) {
             summary: parsed?.summary ?? null,
             parseStatus: parsed?.parse_status ?? "ok",
             content: file.content,
-          },
-        });
+          };
+        }),
+        select: { id: true, path: true },
+      });
+      const recordIds = new Map(records.map((record) => [record.path, record.id]));
+      const chunkRows = fetched.flatMap((file) => {
+        const fileRecordId = recordIds.get(file.path);
+        if (!fileRecordId) return [];
+        const parsed = byPath.get(file.path);
         const chunks = parsed?.chunks ?? fallbackChunks(file.content);
-        if (chunks.length) {
-          await tx.codeChunk.createMany({
-            data: chunks.map((c) => ({
-              fileRecordId: record.id,
-              startLine: c.start_line,
-              endLine: c.end_line,
-              symbolName: c.symbol_name,
-              content: c.content.slice(0, 8000),
-            })),
-          });
-        }
+        return chunks.map((chunk) => ({
+          fileRecordId,
+          startLine: chunk.start_line,
+          endLine: chunk.end_line,
+          symbolName: chunk.symbol_name,
+          content: chunk.content.slice(0, 8000),
+        }));
+      });
+      if (chunkRows.length) {
+        await tx.codeChunk.createMany({ data: chunkRows });
       }
 
       await tx.analysisRun.update({
         where: { id: runId },
         data: { status: "completed", completedAt: new Date() },
       });
-    });
+    }, { maxWait: 10_000, timeout: 60_000 });
   } catch (err) {
     const code = err instanceof GithubError ? err.code : "analysis_failed";
     const message = err instanceof Error ? err.message : "Unknown analysis error";
