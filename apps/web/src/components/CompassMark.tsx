@@ -1,15 +1,13 @@
 export function CompassMark({ size = 72 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 72 72" fill="none" aria-hidden="true">
-      <circle cx="36" cy="36" r="33" stroke="#1d1914" strokeWidth="1.2" />
-      <circle cx="36" cy="36" r="26" stroke="#9a4a28" strokeWidth="0.8" opacity="0.85" />
-      <circle cx="36" cy="36" r="4.5" fill="#234038" />
-      <path d="M36 8 L40 36 L36 32 L32 36 Z" fill="#9a4a28" />
-      <path d="M36 64 L32 36 L36 40 L40 36 Z" fill="#1d1914" />
-      <path d="M8 36 L36 32 L32 36 L36 40 Z" fill="#1d1914" opacity="0.55" />
-      <path d="M64 36 L36 40 L40 36 L36 32 Z" fill="#1d1914" opacity="0.55" />
-      <path d="M18 18 L36 34 L22 22" stroke="#b0893e" strokeWidth="1" />
-      <path d="M54 54 L36 38 L50 50" stroke="#b0893e" strokeWidth="1" />
+    <svg width={size} height={size} viewBox="0 0 100 100" fill="none" aria-hidden="true">
+      <circle cx="50" cy="50" r="48" fill="#172B50" />
+      <path d="M48.5 3.5C35.9 14.3 20 28.3 18.5 38.1c-1.4 9 12.2 17.3 30.8 29.6 9.4-10.1 12.3-19.1 7.5-29C52.6 28.4 49.5 16.1 48.5 3.5Z" fill="#7095FF" />
+      <path d="M51.5 3.5C64.1 14.3 80 28.3 81.5 38.1c1.4 9-12.2 17.3-30.8 29.6-9.4-10.1-12.3-19.1-7.5-29C47.4 28.4 50.5 16.1 51.5 3.5Z" fill="#AFC4FF" />
+      <path d="M48.5 96.5C35.9 85.7 20 71.7 18.5 61.9c-1.4-9 12.2-17.3 30.8-29.6 9.4 10.1 12.3 19.1 7.5 29C52.6 71.6 49.5 83.9 48.5 96.5Z" fill="#AFC4FF" />
+      <path d="M51.5 96.5C64.1 85.7 80 71.7 81.5 61.9c1.4-9-12.2-17.3-30.8-29.6-9.4 10.1-12.3 19.1-7.5 29C47.4 71.6 50.5 83.9 51.5 96.5Z" fill="#4F77F2" />
+      <path d="M50 34c-5.3 4.6-9.3 8.2-12.4 12 3.2 3.6 7.2 7.2 12.4 12 5.3-4.8 9.3-8.4 12.4-12-3.1-3.8-7.1-7.4-12.4-12Z" fill="#fff" />
+      <circle cx="50" cy="50" r="47.5" stroke="#FFFFFF" strokeOpacity=".18" />
     </svg>
   );
 }

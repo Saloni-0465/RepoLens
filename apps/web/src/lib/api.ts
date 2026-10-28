@@ -88,6 +88,12 @@ export function getFile(id: string, fileId: string) {
   }>(`/api/repositories/${id}/files/${fileId}`);
 }
 
+export function getSource(id: string, path: string) {
+  return req<{ path: string; language: string | null; fileRole: string | null; summary: string | null; content: string | null }>(
+    `/api/repositories/${id}/source?path=${encodeURIComponent(path)}`,
+  );
+}
+
 export function askQuestion(id: string, question: string, sessionId: string) {
   return req<{
     answer: string;

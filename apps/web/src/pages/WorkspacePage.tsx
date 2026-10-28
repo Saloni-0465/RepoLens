@@ -7,6 +7,7 @@ import {
   FileMeta,
   getFile,
   getRepository,
+  getSource,
   getTree,
   RepoView,
   TreeNode,
@@ -62,12 +63,14 @@ export function WorkspacePage() {
     };
   }, [id]);
 
-  async function openFile(file: FileMeta) {
+  async function openFile(file: FileMeta | Pick<TreeNode, "path">) {
     if (!id) return;
-    setSelected(file);
+    const indexed = "id" in file;
+    const path = file.path;
+    setSelected(indexed ? file : { id: "", path, language: null, fileRole: null, sizeBytes: 0, summary: null, parseStatus: "on-demand" });
     setFileBody("Loading…");
     try {
-      const full = await getFile(id, file.id);
+      const full = indexed ? await getFile(id, file.id) : await getSource(id, path);
       setFileBody(full.content ?? "(content was not indexed)");
     } catch (err) {
       setFileBody(err instanceof Error ? err.message : "Unable to load file");
@@ -101,39 +104,29 @@ export function WorkspacePage() {
   }
 
   const techs = repo?.analysis?.technologies ?? [];
-  const grouped = useMemo(() => {
-    const map = new Map<string, typeof techs>();
+  const uniqueTechs = useMemo(() => {
+    const map = new Map<string, (typeof techs)[number]>();
     for (const t of techs) {
+      const key = `${t.category.toLowerCase()}::${t.name.toLowerCase()}`;
+      const current = map.get(key);
+      const depth = (path: string) => path.split("/").length;
+      // Prefer the shallowest manifest for a compact, useful evidence link.
+      if (!current || depth(t.evidenceFile) < depth(current.evidenceFile) || (depth(t.evidenceFile) === depth(current.evidenceFile) && t.evidenceFile.length < current.evidenceFile.length)) {
+        map.set(key, t);
+      }
+    }
+    return [...map.values()].sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+  }, [techs]);
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, typeof uniqueTechs>();
+    for (const t of uniqueTechs) {
       const list = map.get(t.category) ?? [];
       list.push(t);
       map.set(t.category, list);
     }
     return [...map.entries()];
-  }, [techs]);
-
-  const architecture = useMemo(() => {
-    const folders = new Map<string, FileMeta[]>();
-    for (const file of files) {
-      const parts = file.path.split("/");
-      if (parts.length < 2) continue;
-      const folder = parts[0];
-      const list = folders.get(folder) ?? [];
-      list.push(file);
-      folders.set(folder, list);
-    }
-    const nodes = [...folders.entries()]
-      .map(([name, entries]) => ({
-        name,
-        entries,
-        representative: entries.find((f) => f.fileRole === "entry") ?? entries.find((f) => f.fileRole === "source") ?? entries[0],
-      }))
-      .sort((a, b) => b.entries.length - a.entries.length || a.name.localeCompare(b.name))
-      .slice(0, 4);
-    return {
-      entry: files.find((f) => f.fileRole === "entry") ?? files.find((f) => f.fileRole === "manifest") ?? files[0],
-      nodes,
-    };
-  }, [files]);
+  }, [uniqueTechs]);
 
   const keyFiles = useMemo(() => {
     const priority = ["entry", "manifest", "config", "docs", "source"];
@@ -141,6 +134,8 @@ export function WorkspacePage() {
       .sort((a, b) => (priority.indexOf(a.fileRole ?? "other") < 0 ? priority.length : priority.indexOf(a.fileRole ?? "other")) - (priority.indexOf(b.fileRole ?? "other") < 0 ? priority.length : priority.indexOf(b.fileRole ?? "other")) || a.path.localeCompare(b.path))
       .slice(0, 5);
   }, [files]);
+
+  const sourceLines = fileBody?.split(/\r?\n/) ?? [];
 
   return (
     <SiteFrame activeSection={section} onSectionChange={setSection} workspaceReady={status === "completed"}>
@@ -180,7 +175,7 @@ export function WorkspacePage() {
       {status === "completed" && repo?.analysis && <>
         <nav className="workspace-tabs" aria-label="Repository views">
           {([
-            ["overview", "Overview"], ["stack", "Tech stack"], ["architecture", "Architecture"], ["explorer", "File explorer"], ["questions", "Ask questions"],
+            ["overview", "Overview"], ["stack", "Tech stack"], ["explorer", "File explorer"], ["questions", "Ask questions"],
           ] as [WorkspaceSection, string][]).map(([view, label]) => (
             <button key={view} type="button" className={section === view ? "selected" : ""} onClick={() => setSection(view)}>{label}</button>
           ))}
@@ -196,7 +191,7 @@ export function WorkspacePage() {
           <div className="overview-grid">
             <section className="workspace-card overview-tech-card">
               <div className="card-heading"><div><span className="card-kicker">EVIDENCE FROM MANIFESTS</span><h2>Tech stack</h2></div><button type="button" className="card-link" onClick={() => setSection("stack")}>View all →</button></div>
-              {techs.length ? <ul className="overview-tech-list">{techs.slice(0, 6).map((tech, index) => <li key={tech.id}><span className={`tech-bullet tone-${index % 5}`}>{tech.name.slice(0, 1).toUpperCase()}</span><span className="overview-tech-name">{tech.name}</span><span className="overview-tech-category">{tech.category}</span><button type="button" className="evidence-mini-link" title={`Open ${tech.evidenceFile}`} onClick={() => { const file = files.find((item) => item.path === tech.evidenceFile); if (file) { void openFile(file); setSection("explorer"); } }}>↗</button></li>)}</ul> : <p className="empty-message">No supported manifests were indexed.</p>}
+              {uniqueTechs.length ? <ul className="overview-tech-list">{uniqueTechs.slice(0, 6).map((tech, index) => <li key={`${tech.category}-${tech.name}`}><span className={`tech-bullet tone-${index % 5}`}>{tech.name.slice(0, 1).toUpperCase()}</span><span className="overview-tech-name">{tech.name}</span><span className="overview-tech-category">{tech.category}</span><button type="button" className="evidence-mini-link" title={`Open ${tech.evidenceFile}`} onClick={() => { const file = files.find((item) => item.path === tech.evidenceFile); if (file) { void openFile(file); setSection("explorer"); } }}>↗</button></li>)}</ul> : <p className="empty-message">No supported manifests were indexed.</p>}
               <button type="button" className="subtle-link" onClick={() => setSection("stack")}>See all technologies <span>→</span></button>
             </section>
 
@@ -208,49 +203,39 @@ export function WorkspacePage() {
               <ul className="key-files-list">{keyFiles.slice(0, 4).map((file) => <li key={file.id}><button type="button" onClick={() => { void openFile(file); setSection("explorer"); }}><span className="file-type-mark">{file.path.endsWith(".json") ? "{}" : file.path.endsWith(".md") ? "M" : "⌘"}</span><span className="key-file-path">{file.path}</span><span className="key-file-role">{file.fileRole ?? "source"}</span><span className="key-file-arrow">›</span></button></li>)}</ul>
             </section>
 
-            <section className="workspace-card quick-actions-card">
-              <div className="card-heading"><div><span className="card-kicker">KEEP EXPLORING</span><h2>Quick actions</h2></div><span className="card-mark">↗</span></div>
-              <div className="quick-actions-list">
-                {([["explorer", "▤", "View file explorer", "Browse folders and source"], ["questions", "◎", "Ask a question", "Get answers with citations"], ["architecture", "⌘", "View architecture", "Map folders and entry points"]] as [WorkspaceSection, string, string, string][]).map(([view, icon, label, detail]) => <button type="button" key={view} onClick={() => setSection(view)}><span className="quick-action-icon">{icon}</span><span className="quick-action-copy"><strong>{label}</strong><small>{detail}</small></span><span className="quick-action-arrow">›</span></button>)}
-              </div>
-              <div className="overview-counts"><div><strong>{repo.analysis.skippedFiles}</strong><span>Skipped by filters</span></div><div><strong>{techs.length}</strong><span>Stack findings</span></div></div>
-            </section>
           </div>
         </section>}
 
         {section === "stack" && <section id="workspace-stack" className="detail-screen">
-          <div className="section-title-row"><div><span className="card-kicker">DECLARED IN THE REPOSITORY</span><h2>Technology stack</h2><p>Detected from dependency manifests and configuration files, with evidence for every finding.</p></div><span className="section-count">{techs.length} findings</span></div>
-          {grouped.length ? <div className="stack-page-grid">{grouped.map(([cat, items]) => <article className="workspace-card stack-category-card" key={cat}><div className="stack-category-heading"><span className="tech-category-icon">{cat.slice(0, 1)}</span><div><span className="card-kicker">CATEGORY</span><h3>{cat}</h3></div><span className="category-count">{items.length}</span></div><ul className="stack-detail-list">{items.map((tech) => <li key={tech.id}><div className="stack-detail-name"><strong>{tech.name}</strong><span className={`confidence-chip confidence-${tech.confidence.toLowerCase()}`}>{tech.confidence} confidence</span></div><p>{tech.evidenceDetail}</p><button type="button" className="stack-evidence-button" onClick={() => { const file = files.find((item) => item.path === tech.evidenceFile); if (file) { void openFile(file); setSection("explorer"); } }}><span>Evidence</span><code>{tech.evidenceFile}</code><span>Open source →</span></button></li>)}</ul></article>)}</div> : <div className="workspace-card empty-state"><span className="empty-state-icon">◈</span><h3>No stack evidence found</h3><p>No supported dependency manifests were indexed for this repository.</p></div>}
-        </section>}
-
-        {section === "architecture" && <section id="workspace-architecture" className="architecture-screen">
-          <div className="section-title-row"><div><span className="card-kicker">PROJECT STRUCTURE</span><h2>Architecture map</h2><p>Explore the main folders and entry point identified in this repository.</p></div><div className="architecture-summary"><strong>{architecture.nodes.length}</strong><span>folders</span><b>·</b><strong>{files.filter((file) => file.fileRole === "entry").length}</strong><span>entry points</span></div></div>
-          <section className="workspace-card architecture-map-card">
-              <div className="architecture-card-heading"><div><span className="card-kicker">REPOSITORY</span><h3>{repo.fullName}</h3></div><span className="evidence-chip"><i />Based on indexed files</span></div>
-              <p className="architecture-disclaimer">This map groups indexed files by folder. Lines mean “contains”; they do not show function calls or runtime dependencies.</p>
-              {architecture.entry && <button type="button" className="architecture-entry-summary" onClick={() => { void openFile(architecture.entry!); setSection("explorer"); }}><span className="architecture-node-icon">⌘</span><span><small>DETECTED ENTRY POINT</small><strong>{architecture.entry.path}</strong></span><span className="entry-open">Open source →</span></button>}
-              <div className="architecture-map">
-                <svg className="architecture-connectors" viewBox="0 0 1000 390" preserveAspectRatio="none" aria-hidden="true">
-                  <defs><marker id="arrowhead" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="none" stroke="#a7baf0" strokeWidth="1.4" /></marker></defs>
-                  {architecture.nodes.map((node, index) => {
-                    const positions = architecture.nodes.length === 1 ? [500] : architecture.nodes.length === 2 ? [300, 700] : architecture.nodes.length === 3 ? [180, 500, 820] : [110, 370, 630, 890];
-                    return <path key={node.name} d={`M500 65 C500 105 ${positions[index]} 110 ${positions[index]} 190`} />;
-                  })}
-                </svg>
-                <button type="button" className="architecture-node architecture-root" onClick={() => setSection("overview")}><span className="architecture-node-icon root-icon">⌂</span><span><strong>Repository</strong><small>{repo.fullName}</small></span></button>
-                <div className="architecture-modules">
-                  {architecture.nodes.length ? architecture.nodes.map((node) => <button type="button" className="architecture-node architecture-module" key={node.name} onClick={() => { void openFile(node.representative); setSection("explorer"); }}><span className="architecture-node-icon folder-icon">▰</span><span><strong>{node.name}/</strong><small>{node.entries.length} indexed {node.entries.length === 1 ? "file" : "files"}</small></span><span className="module-open">↗</span></button>) : <div className="architecture-empty">No top-level directories were included in the indexed source.</div>}
-                </div>
-              </div>
-              <div className="architecture-legend"><span><i className="legend-folder" />Directory</span><span><i className="legend-entry" />Entry point / manifest</span><span><i className="legend-connection" />Contains</span></div>
-          </section>
+          <div className="section-title-row"><div><span className="card-kicker">DECLARED IN THE REPOSITORY</span><h2>Technology stack</h2></div><span className="section-count">{uniqueTechs.length} technologies</span></div>
+          {grouped.length ? <div className="stack-page-grid">{grouped.map(([cat, items]) => <article className="workspace-card stack-category-card" key={cat}><div className="stack-category-heading"><span className="tech-category-icon">{cat.slice(0, 1).toUpperCase()}</span><div><span className="card-kicker">CATEGORY</span><h3>{cat.charAt(0).toUpperCase() + cat.slice(1)}</h3></div><span className="category-count">{items.length}</span></div><ul className="stack-detail-list">{items.map((tech) => <li key={`${tech.category}-${tech.name}`}><div className="stack-detail-name"><strong>{tech.name}</strong><span className={`confidence-chip confidence-${tech.confidence.toLowerCase()}`}>{tech.confidence} confidence</span></div><p>{tech.evidenceDetail}</p><button type="button" className="stack-evidence-button" onClick={() => { const file = files.find((item) => item.path === tech.evidenceFile); if (file) { void openFile(file); setSection("explorer"); } }}><span>Evidence</span><code>{tech.evidenceFile}</code><span>Open source →</span></button></li>)}</ul></article>)}</div> : <div className="workspace-card empty-state"><span className="empty-state-icon">◈</span><h3>No stack evidence found</h3><p>No supported dependency manifests were indexed for this repository.</p></div>}
         </section>}
 
         {section === "explorer" && <section id="workspace-explorer" className="explorer-screen">
           <div className="section-title-row"><div><span className="card-kicker">BROWSE THE PROJECT</span><h2>File explorer</h2><p>Choose a file to preview its indexed source.</p></div><span className="section-count">{files.length} files</span></div>
           <div className="explorer-grid">
-            <div className="workspace-card tree-card"><div className="card-heading"><div><span className="card-kicker">REPOSITORY TREE</span><h2>Files</h2></div><span className="card-mark">{files.length}</span></div><div className="tree-container">{tree.length ? <TreeView nodes={tree} files={files} onOpen={openFile} /> : <p>No tree stored.</p>}</div></div>
-            <div className="workspace-card source-card"><div className="card-heading"><div><span className="card-kicker">SOURCE PREVIEW</span><h2>{selected?.path ?? "Choose a file"}</h2></div><span className="source-file-mark" aria-hidden="true">{selected ? "{ }" : "⌘"}</span></div>{selected?.summary && <p className="source-summary">{selected.summary}</p>}<pre className="source-code"><code>{fileBody ?? "Choose a path from the file explorer to read its indexed contents."}</code></pre></div>
+            <div className="workspace-card tree-card"><div className="card-heading"><div><span className="card-kicker">REPOSITORY TREE</span><h2>Files</h2></div><span className="card-mark">{files.length}</span></div><div className="tree-container">{tree.length ? <TreeView nodes={tree} files={files} onOpen={openFile} selectedPath={selected?.path} /> : <p>No tree stored.</p>}</div></div>
+            <div className="workspace-card source-card">
+              <div className="source-ide-toolbar">
+                <div className="source-tab">
+                  <span className={`source-tab-icon ${fileIconTone(selected?.path)}`}>{fileIconLabel(selected?.path)}</span>
+                  <strong>{selected?.path.split("/").pop() ?? "Select a file"}</strong>
+                  {selected && <span className="source-tab-close">×</span>}
+                </div>
+                <div className="source-editor-status"><span><i /> Indexed source</span><b>READ ONLY</b></div>
+              </div>
+              <div className="source-crumb-row">
+                <div className="source-breadcrumb">{selected ? <><span>repository</span>{selected.path.split("/").map((part, index) => <span key={`${part}-${index}`}><i>/</i>{part}</span>)}</> : <span>repository / source</span>}</div>
+                {selected && <span className="source-language-tag">{languageLabel(selected.path)}</span>}
+              </div>
+              {selected?.summary && <div className="source-summary">{selected.summary}</div>}
+              <div className={`source-editor ${fileBody ? "has-source" : "is-empty"}`}>
+                {fileBody ? <>
+                  <div className="source-line-numbers" aria-hidden="true">{sourceLines.map((_, index) => <span key={index}>{index + 1}</span>)}</div>
+                  <pre className="source-code" aria-label={`Source code: ${selected?.path ?? "file"}`}><code>{sourceLines.map((line, index) => <span className="source-line" key={index}>{highlightSourceLine(line)}</span>)}</code></pre>
+                </> : <div className="source-empty-state"><span>⌘</span><strong>Select a file to open it</strong><p>Choose a file from the repository tree to inspect its indexed source.</p></div>}
+              </div>
+            </div>
           </div>
         </section>}
 
@@ -270,11 +255,13 @@ function TreeView({
   nodes,
   files,
   onOpen,
+  selectedPath,
   depth = 0,
 }: {
   nodes: TreeNode[];
   files: FileMeta[];
-  onOpen: (f: FileMeta) => void;
+  onOpen: (f: FileMeta | Pick<TreeNode, "path">) => void;
+  selectedPath?: string;
   depth?: number;
 }) {
   return (
@@ -285,22 +272,78 @@ function TreeView({
           <li key={n.path} style={{ paddingLeft: depth * 12 }}>
             {n.type === "dir" ? (
               <details open={depth < 1}>
-                <summary className="cursor-pointer text-pine">{n.name}/</summary>
-                {n.children && <TreeView nodes={n.children} files={files} onOpen={onOpen} depth={depth + 1} />}
+                <summary className="cursor-pointer text-pine"><span className="tree-folder-glyph" aria-hidden="true" />{n.name}/</summary>
+                {n.children && <TreeView nodes={n.children} files={files} onOpen={onOpen} selectedPath={selectedPath} depth={depth + 1} />}
               </details>
             ) : meta ? (
-              <button type="button" className="text-left hover:text-copper" onClick={() => onOpen(meta)}>
-                {n.name}
+              <button type="button" className={`tree-file-button ${selectedPath === meta.path ? "selected" : ""}`} onClick={() => onOpen(meta)}>
+                <span className={`tree-file-icon ${fileIconTone(meta.path)}`} aria-hidden="true">{fileIconLabel(meta.path)}</span>
+                <span className="tree-file-name">{n.name}</span>
                 {meta.fileRole && meta.fileRole !== "other" ? (
-                  <span className="ml-2 stamp text-muted">{meta.fileRole}</span>
+                  <span className="tree-file-role">{meta.fileRole}</span>
                 ) : null}
               </button>
             ) : (
-              <span className="text-muted">{n.name}</span>
+              <button type="button" className={`tree-file-button tree-file-on-demand ${selectedPath === n.path ? "selected" : ""}`} title="Load this file from the analyzed repository snapshot" onClick={() => onOpen(n)}>
+                <span className={`tree-file-icon ${fileIconTone(n.path)}`} aria-hidden="true">{fileIconLabel(n.path)}</span>
+                <span className="tree-file-name">{n.name}</span>
+                <span className="tree-file-role">load on open</span>
+              </button>
             )}
           </li>
         );
       })}
     </ul>
   );
+}
+
+function fileExtension(path?: string) {
+  return path?.split("/").pop()?.split(".").pop()?.toLowerCase() ?? "";
+}
+
+function fileIconLabel(path?: string) {
+  const ext = fileExtension(path);
+  const labels: Record<string, string> = { ts: "TS", tsx: "TS", js: "JS", jsx: "JS", mjs: "JS", py: "PY", json: "{}", md: "M", toml: "T", yml: "Y", yaml: "Y", css: "#", scss: "#", html: "<>" , rs: "RS", go: "GO", lock: "L" };
+  return labels[ext] ?? (ext ? ext.slice(0, 2).toUpperCase() : "<>" );
+}
+
+function fileIconTone(path?: string) {
+  const ext = fileExtension(path);
+  if (["ts", "tsx"].includes(ext)) return "tone-typescript";
+  if (["js", "jsx", "mjs"].includes(ext)) return "tone-javascript";
+  if (ext === "py") return "tone-python";
+  if (ext === "json") return "tone-json";
+  if (ext === "md") return "tone-markdown";
+  return "tone-config";
+}
+
+const CODE_KEYWORDS = new Set("as async await break case catch class const continue def del elif else enum export extends finally for from function if import in interface let match new of package private protected public return static struct switch throw try type var while yield self None True False null undefined true false fn impl pub use mod mut where async await move trait crate super match loop dyn ref".split(/\s+/));
+const CODE_TOKEN = /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\/\/.*|#.*|\b[A-Za-z_$][\w$]*\b|\b\d+(?:\.\d+)?\b)/g;
+
+function highlightSourceLine(line: string) {
+  const tokens: React.ReactNode[] = [];
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+  CODE_TOKEN.lastIndex = 0;
+  while ((match = CODE_TOKEN.exec(line)) !== null) {
+    if (match.index > cursor) tokens.push(line.slice(cursor, match.index));
+    const token = match[0];
+    const next = line.slice(match.index + token.length).match(/^\s*([=(])/);
+    let tone = "";
+    if (/^(\/\/|#)/.test(token)) tone = "syntax-comment";
+    else if (/^["'`]/.test(token)) tone = "syntax-string";
+    else if (/^\d/.test(token)) tone = "syntax-number";
+    else if (CODE_KEYWORDS.has(token)) tone = "syntax-keyword";
+    else if (next?.[1] === "(") tone = "syntax-function";
+    tokens.push(<span className={tone} key={`${match.index}-${token}`}>{token}</span>);
+    cursor = match.index + token.length;
+  }
+  if (cursor < line.length) tokens.push(line.slice(cursor));
+  return tokens.length ? tokens : " ";
+}
+
+function languageLabel(path: string) {
+  const ext = fileExtension(path);
+  const labels: Record<string, string> = { ts: "TypeScript", tsx: "TypeScript React", js: "JavaScript", jsx: "JavaScript React", py: "Python", json: "JSON", md: "Markdown", toml: "TOML", yml: "YAML", yaml: "YAML", css: "CSS", scss: "SCSS", html: "HTML", rs: "Rust", go: "Go" };
+  return labels[ext] ?? (ext ? ext.toUpperCase() : "Plain text");
 }

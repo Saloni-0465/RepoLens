@@ -1,7 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { CompassMark } from "./CompassMark";
 
-export type WorkspaceSection = "overview" | "stack" | "architecture" | "explorer" | "questions";
+export type WorkspaceSection = "overview" | "stack" | "explorer" | "questions";
 
 export function SiteFrame({
   children,
@@ -36,7 +36,6 @@ export function SiteFrame({
             {([
               ["overview", "⌂", "Overview"],
               ["stack", "◈", "Tech stack"],
-              ["architecture", "⌘", "Architecture"],
               ["explorer", "▤", "File explorer"],
               ["questions", "◎", "Ask questions"],
             ] as [WorkspaceSection, string, string][]).map(([section, icon, label]) => (
