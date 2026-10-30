@@ -21,7 +21,7 @@ Node API (Express / TypeScript / Prisma)
 2. The pipeline loads metadata, the recursive git tree, and a capped set of source/manifest files.
 3. Binaries, dependency folders, lockfiles, and secret-like names are skipped.
 4. The analyzer returns technology findings, symbols, summaries, and chunks with line ranges.
-5. `POST /api/repositories/:id/questions` retrieves chunks with PostgreSQL full-text search, then either quotes them or asks a hosted LLM if `OPENAI_API_KEY` is set. Citations are checked against retrieved paths.
+5. `POST /api/repositories/:id/questions` retrieves chunks with PostgreSQL full-text search, then either quotes them or asks a hosted LLM if `LLM_API_KEY` is set. `LLM_BASE_URL` and `LLM_MODEL` select the OpenAI-compatible provider endpoint and model. Citations are checked against retrieved paths.
 
 ## Limits
 

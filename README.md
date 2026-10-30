@@ -33,7 +33,7 @@ npx prisma generate
 
 4. Set `GITHUB_TOKEN` in `.env` before analyzing repositories. Without it, GitHub limits requests to 60 per hour per originating IP; a personal access token raises the authenticated quota. Use a read-only token and keep it in the server-side `.env` file (never in frontend code). If a token has just been added or changed, restart the API.
 
-5. Optional: set `OPENAI_API_KEY` for natural-language answers. `OPENAI_MODEL` defaults to `gpt-4o-mini`. Without an OpenAI key, RepoLens answers by quoting the most relevant retrieved source chunks.
+5. Optional: configure a hosted LLM for natural-language summaries and answers with `LLM_API_KEY`, `LLM_BASE_URL`, and `LLM_MODEL`. The defaults in `.env.example` use OpenAI. To use Gemini, set `LLM_BASE_URL` to `https://generativelanguage.googleapis.com/v1beta/openai` and `LLM_MODEL` to a model available to your AI Studio project (for example, `gemini-3.8-flash`). Without an LLM key, RepoLens returns evidence-based fallback text or source excerpts.
 
 6. Run everything:
 
@@ -45,7 +45,7 @@ npm run dev
 
 - GitHub's REST API supplies repository metadata and the file tree. RepoLens downloads selected source and manifest files, then the Python analyzer detects technologies from dependency/configuration files and extracts code structure with parsers. This indexing step does not call an AI model.
 - Questions are matched against indexed code using PostgreSQL full-text search, with a basic keyword fallback. This search does not use embeddings or an AI model.
-- When `OPENAI_API_KEY` is configured, the selected `OPENAI_MODEL` (default `gpt-4o-mini`) drafts an answer from retrieved excerpts. RepoLens validates citations against the retrieved files. Without the key, it returns source excerpts directly.
+- When `LLM_API_KEY` is configured, the selected `LLM_MODEL` drafts a summary or answer from repository evidence. `LLM_BASE_URL` selects an OpenAI-compatible provider endpoint. RepoLens validates Q&A citations against retrieved files. Without the key, it returns evidence-based fallback text or source excerpts directly.
 
 ## Tests
 

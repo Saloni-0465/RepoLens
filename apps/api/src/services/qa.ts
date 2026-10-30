@@ -76,8 +76,8 @@ function insufficientAnswer() {
 
 function unavailableAnswer(reason: "missing-key" | "request-failed") {
   return reason === "missing-key"
-    ? "I found source files to inspect, but the AI answer service is not configured. Add OPENAI_API_KEY to the Render API service to get a plain-language explanation. The source references are still available below."
-    : "I found source files to inspect, but the AI answer service did not respond successfully. Check the Render API logs and OpenAI key or usage limits, then try again. The source references are still available below.";
+    ? "I found source files to inspect, but the AI answer service is not configured. Add LLM_API_KEY to the Render API service to get a plain-language explanation. The source references are still available below."
+    : "I found source files to inspect, but the AI answer service did not respond successfully. Check the Render API logs, provider key, and usage limits, then try again. The source references are still available below.";
 }
 
 function validateCitations(citations: Citation[], indexed: Citation[]): Citation[] {
@@ -94,7 +94,7 @@ export async function answerQuestion(runId: string, question: string, sessionId:
     data: { analysisRunId: runId, sessionId, role: "user", content: question },
   });
 
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  const apiKey = process.env.LLM_API_KEY?.trim();
   let answer: string;
   let insufficient = false;
   let citations = indexed;
@@ -103,7 +103,7 @@ export async function answerQuestion(runId: string, question: string, sessionId:
     answer = insufficientAnswer();
     insufficient = true;
   } else if (!apiKey) {
-    console.warn("Q&A answer is using its unavailable-service message because OPENAI_API_KEY is not configured.");
+    console.warn("Q&A answer is using its unavailable-service message because LLM_API_KEY is not configured.");
     answer = unavailableAnswer("missing-key");
     insufficient = false;
   } else {
@@ -130,7 +130,7 @@ export async function answerQuestion(runId: string, question: string, sessionId:
 }
 
 async function askLlm(question: string, evidence: Citation[], apiKey: string) {
-  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+  const model = process.env.LLM_MODEL || "gpt-4o-mini";
   const evidenceBlock = evidence
     .map(
       (c, i) =>
@@ -158,7 +158,7 @@ async function askLlm(question: string, evidence: Citation[], apiKey: string) {
 
   let res: Response;
   try {
-    res = await fetch("https://api.openai.com/v1/chat/completions", {
+    res = await fetch(`${(process.env.LLM_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, "")}/chat/completions`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -169,7 +169,7 @@ async function askLlm(question: string, evidence: Citation[], apiKey: string) {
     });
   } catch (error) {
     const reason = error instanceof Error ? error.name : "NetworkError";
-    console.warn(`OpenAI Q&A request could not reach the API (${reason}).`);
+    console.warn(`LLM Q&A request could not reach the API (${reason}).`);
     return { answer: unavailableAnswer("request-failed"), insufficient: false, citations: evidence };
   }
   if (!res.ok) {
@@ -180,14 +180,14 @@ async function askLlm(question: string, evidence: Citation[], apiKey: string) {
     } catch {
       // Do not log the response body; it may contain provider details we don't need.
     }
-    console.warn(`OpenAI Q&A request failed with status ${res.status} (${errorCode}).`);
+    console.warn(`LLM Q&A request failed with status ${res.status} (${errorCode}).`);
     return { answer: unavailableAnswer("request-failed"), insufficient: false, citations: evidence };
   }
   let data: { choices?: { message?: { content?: string } }[] };
   try {
     data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
   } catch {
-    console.warn("OpenAI Q&A returned a response that was not valid JSON.");
+    console.warn("LLM Q&A returned a response that was not valid JSON.");
     return { answer: unavailableAnswer("request-failed"), insufficient: false, citations: evidence };
   }
   const text = data.choices?.[0]?.message?.content ?? "";
@@ -211,7 +211,7 @@ async function askLlm(question: string, evidence: Citation[], apiKey: string) {
     });
     return { answer: parsed.answer, insufficient: Boolean(parsed.insufficient), citations };
   } catch {
-    console.warn("OpenAI Q&A response could not be parsed into the expected answer format.");
+    console.warn("LLM Q&A response could not be parsed into the expected answer format.");
     return { answer: unavailableAnswer("request-failed"), insufficient: false, citations: evidence };
   }
 }
