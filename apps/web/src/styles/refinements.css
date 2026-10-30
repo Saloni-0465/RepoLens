@@ -47,6 +47,11 @@
   border-bottom:1px solid rgba(220,229,244,.72);
   background:linear-gradient(180deg,rgba(255,255,255,.64),rgba(255,255,255,.18));
 }
+
+.citation-source { margin-top:8px; }
+.citation-source summary { width:fit-content;color:#71809a;font-size:10px;cursor:pointer; }
+.citation-source[open] summary { margin-bottom:7px;color:#405b8d; }
+.overview-summary { white-space:pre-line; }
 .home-shell .brand-lockup { gap:12px; }
 .home-shell .brand-lockup svg { width:45px;height:45px; }
 .home-shell .brand-name { color:#192d50;font-size:18px;letter-spacing:-.45px; }

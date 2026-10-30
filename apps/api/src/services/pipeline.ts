@@ -237,12 +237,9 @@ async function composeSummary(
   const rootReadme = fetched.find((file) => !file.path.includes("/") && isReadme(file.path));
   const readmeText = readmeIntroduction(rootReadme?.content ?? analysis.overview_hints.readme_excerpt ?? undefined);
   const descriptionText = cleanSummaryText(description);
-  const fallbackParts = [descriptionText];
-  if (readmeText && !descriptionText.toLowerCase().includes(readmeText.slice(0, 70).toLowerCase())) {
-    fallbackParts.push(readmeText);
-  }
-  if (!readmeText && entries.length) fallbackParts.push(`Key starting points include ${entries.slice(0, 3).join(", ")}.`);
-  const fallback = fallbackParts.filter(Boolean).join(" ").slice(0, 1600);
+  // If generation is unavailable, show one clean source of truth instead of concatenating unrelated README fragments.
+  const fallback = (descriptionText || readmeText || (entries.length ? `Key starting points include ${entries.slice(0, 3).join(", ")}.` : ""))
+    .slice(0, 600);
 
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
@@ -291,6 +288,7 @@ async function composeSummary(
       .replace(/^#{1,6}\s+/gm, "")
       .replace(/\*\*(.*?)\*\*/g, "$1");
     if (generated && generated.length > 100 && generated.length <= 2400) return generated;
+    console.warn("OpenAI summary response did not contain a usable overview; using the repository description fallback.");
   } catch (error) {
     const reason = error instanceof Error ? error.message : "unknown error";
     console.warn(`Repository summary request failed (${reason}); using repository evidence fallback.`);
