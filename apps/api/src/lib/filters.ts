@@ -112,7 +112,7 @@ export function fileRole(path: string): string {
   ) {
     return "config";
   }
-  if (name === "readme.md" || name === "readme") return "docs";
+  if (/^readme(?:\.(?:md|rst|txt))?$/.test(name)) return "docs";
   if (
     /(?:^|\/)(?:src\/)?(?:index|main|app|server|cli)\.(?:py|ts|tsx|js|jsx|mjs)$/i.test(path) ||
     /(?:^|\/)__main__\.py$/i.test(path)

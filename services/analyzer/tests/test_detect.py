@@ -1,5 +1,6 @@
 from app.detectors.stack import detect
 from app.parsers.extract import parse_file
+from app.main import AnalyzeRequest, SourceFile, analyze
 
 
 def test_package_json_react_express():
@@ -47,3 +48,20 @@ app.post("/users", async (req, res) => {
     assert route["end_line"] == 6
     assert "db.user.create" in chunk["content"]
     assert "res.status(201).json(user)" in chunk["content"]
+
+
+def test_overview_prefers_repository_readme_over_nested_fixture_readme():
+    result = analyze(
+        AnalyzeRequest(
+            files=[
+                SourceFile(path="tests/data/README.md", content="# GeoIP2 Test Databases\n\nFixture information."),
+                SourceFile(path="README.rst", content="Django\n======\n\nA high-level overview of the Django web framework."),
+            ]
+        )
+    )
+
+    excerpt = result["overview_hints"]["readme_excerpt"]
+    assert "Django" in excerpt
+    assert "GeoIP2" not in excerpt
+
+

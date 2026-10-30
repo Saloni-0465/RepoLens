@@ -30,11 +30,26 @@ def analyze(req: AnalyzeRequest) -> dict:
     payload = [f.model_dump() for f in req.files]
     technologies = detect(payload)
     parsed = [parse_file(f.path, f.content, f.language) for f in req.files]
-    readme = next((f.content for f in req.files if f.path.lower().endswith("readme.md")), None)
+    readme_names = {"readme", "readme.md", "readme.rst", "readme.txt"}
+    readmes = [f for f in req.files if f.path.rsplit("/", 1)[-1].lower() in readme_names]
+    # Prefer the repository's own overview; test fixtures can contain unrelated READMEs.
+    readmes.sort(key=lambda f: (f.path.count("/"), f.path.lower()))
+    readme = readmes[0].content if readmes else None
     excerpt = None
     if readme:
-        lines = [ln for ln in readme.splitlines() if ln.strip() and not ln.strip().startswith("![")]
-        excerpt = " ".join(lines[:12])[:800]
+        lines = []
+        for line in readme.splitlines():
+            value = line.strip()
+            if not value or value.startswith(("![", ".. image::", ".. figure::", ".. _")):
+                continue
+            if set(value) <= {"=", "-", "~", "#", "*"}:
+                continue
+            value = value.lstrip("# ").strip() if value.startswith("#") else value
+            if value:
+                lines.append(value)
+            if len(" ".join(lines)) >= 1200:
+                break
+        excerpt = " ".join(lines)[:1200] or None
     entries = [f.path for f in req.files if f.role == "entry"]
     if not entries:
         entries = [
