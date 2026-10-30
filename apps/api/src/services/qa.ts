@@ -164,7 +164,8 @@ async function askLlm(question: string, evidence: Citation[], apiKey: string) {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      signal: AbortSignal.timeout(20_000),
+      // Allow slower hosted providers (including Gemini's free tier) time to respond.
+      signal: AbortSignal.timeout(60_000),
       body: JSON.stringify(body),
     });
   } catch (error) {

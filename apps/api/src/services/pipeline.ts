@@ -268,7 +268,8 @@ async function composeSummary(
     const response = await fetch(`${(process.env.LLM_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, "")}/chat/completions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(18000),
+      // Gemini can take longer to respond than the previous 18-second limit.
+      signal: AbortSignal.timeout(60000),
       body: JSON.stringify({
         model: process.env.LLM_MODEL || "gpt-4o-mini",
         temperature: 0.2,
