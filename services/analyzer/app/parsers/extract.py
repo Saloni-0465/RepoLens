@@ -88,10 +88,60 @@ def _js_symbols(content: str) -> list[Symbol]:
     ):
         start = content[: m.start()].count("\n") + 1
         symbols.append({"name": m.group(1), "kind": "function", "start_line": start, "end_line": _guess_end(content, start)})
-    for m in re.finditer(r"\.(get|post|put|patch|delete|use|all)\(\s*['\"]([^'\"]+)['\"]", content):
+    for m in re.finditer(r"\.(get|post|put|patch|delete|use|all)\s*\(\s*(['\"])([^'\"]+)\2", content):
         start = content[: m.start()].count("\n") + 1
-        symbols.append({"name": f"{m.group(1).upper()} {m.group(2)}", "kind": "route", "start_line": start, "end_line": start})
+        end_index = _matching_call_end(content, m.start())
+        end = content[: end_index + 1].count("\n") + 1 if end_index is not None else _guess_end(content, start)
+        symbols.append({"name": f"{m.group(1).upper()} {m.group(3)}", "kind": "route", "start_line": start, "end_line": end})
     return symbols[:80]
+
+
+def _matching_call_end(content: str, call_start: int) -> int | None:
+    """Return the closing parenthesis for a route call, skipping quoted strings and comments."""
+    opening = content.find("(", call_start)
+    if opening < 0:
+        return None
+
+    depth = 0
+    quote: str | None = None
+    escaped = False
+    line_comment = False
+    block_comment = False
+    i = opening
+    while i < len(content):
+        char = content[i]
+        next_char = content[i + 1] if i + 1 < len(content) else ""
+
+        if line_comment:
+            if char == "\n":
+                line_comment = False
+        elif block_comment:
+            if char == "*" and next_char == "/":
+                block_comment = False
+                i += 1
+        elif quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+        elif char == "/" and next_char == "/":
+            line_comment = True
+            i += 1
+        elif char == "/" and next_char == "*":
+            block_comment = True
+            i += 1
+        elif char in {"'", '"', "`"}:
+            quote = char
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return None
 
 
 def _guess_end(content: str, start: int) -> int:

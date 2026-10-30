@@ -28,3 +28,22 @@ def test_python_function_lines():
     fn = next(s for s in result["symbols"] if s["name"] == "greet")
     assert fn["start_line"] == 3
     assert fn["end_line"] >= 3
+
+
+def test_express_route_chunk_includes_handler_body():
+    src = '''import express from "express";
+const app = express();
+app.post("/users", async (req, res) => {
+  const user = await db.user.create({ data: req.body });
+  return res.status(201).json(user);
+});
+'''
+    result = parse_file("routes.ts", src, "typescript")
+    route = next(s for s in result["symbols"] if s["kind"] == "route")
+    chunk = next(c for c in result["chunks"] if c["symbol_name"] == route["name"])
+
+    assert route["name"] == "POST /users"
+    assert route["start_line"] == 3
+    assert route["end_line"] == 6
+    assert "db.user.create" in chunk["content"]
+    assert "res.status(201).json(user)" in chunk["content"]

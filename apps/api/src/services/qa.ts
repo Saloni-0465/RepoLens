@@ -59,7 +59,8 @@ function citationsFrom(rows: Awaited<ReturnType<typeof retrieveChunks>>): Citati
     startLine: r.startLine,
     endLine: r.endLine,
     fileId: r.fileId,
-    snippet: r.content.slice(0, 900),
+    // Keep each indexed chunk intact so the model can inspect complete handlers/functions.
+    snippet: r.content,
   }));
 }
 
